@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">经典通知自由展开</string>
+    <string name="module_description">保留澎湃 OS 经典通知外观，启用系统自带的随手指展开与收起手势。仅作用于系统界面，无后台服务。</string>
+</resources>
