@@ -16,3 +16,6 @@ tools/
 # 临时产物
 *.xml.bak
 shade*.xml
+# 签名密钥不入库
+*.keystore
+*.jks
