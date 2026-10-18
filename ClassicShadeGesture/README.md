@@ -1,53 +1,47 @@
-# 经典通知自由展开
+# 经典通知自由展开 1.0.4
 
-面向 REDMI K90 Pro Max / Android 17 / 澎湃 OS 4.0.2.0.XPMCNXM / LSPosed 2.2.1（7912，API 102）的轻量模块。
+面向本机 REDMI K90 Pro Max / Android 17（API 37）/ 澎湃 OS4.0.4.0.XPMCNXM / LSPosed 2.2.1（7912，API 102）。
 
-目标是保留系统“经典样式”的通知布局，并复用系统内置的 Android `ExpandHelper`，实现拖动过程中逐渐展开、同一次触摸内反向拖动逐渐收回。没有重建通知视图或复制三星组件。
-
-## 实现
-
-模块只有两个功能 hook，作用域固定为 `com.android.systemui`：
-
-1. `NotificationStackScrollLayoutControllerInjectorImpl.updateViewExpandingEnabled()`：保留原有状态更新，在经典样式、非 KEYGUARD 状态下允许已有的 `ExpandHelper` 工作。
-2. `NotificationPanelViewControllerInjector.handleStretchState()`：在已完全打开的经典通知栏内，将通知栏拉伸接管的起步阈值对齐到本机原生样式已有的 `1.5 × touchSlop`，让通知子视图先识别展开动作。其他情形继续调用原方法。
-
-高度计算、内容过渡、松手动画、速度计算、点击、左右滑动均交给原系统。没有服务、定时器、唤醒锁、网络权限、通知监听器或全局布局扫描。应用的通知权限仅用于用户点击“发送测试通知”后发布本地示例；不授予此权限也不影响 hook。
-
-不支持的 SystemUI 字段或方法会记录错误并撤销已安装的功能 hook。没有修改或替换系统 APK；没有更改通知隐私设置。固件升级后需要重新核对内部接口，不能据此声称兼容所有澎湃版本。
+保留系统经典通知样式，复用 Android ExpandHelper。单条和分组能随同一次触摸下拉展开、反向回拖收起；长列表滚动后也可识别。1.0.4 新增对经典分组子通知布局的适配，用户已实测确认可用。与只替换进度的已撤回 1.0.2 不同，1.0.4 同时处理子通知位置、裁切、内容变换、分组标题与图标、背景以及松手衔接。
 
 ## 使用
 
-1. 安装 APK，在 LSPosed 启用“经典通知自由展开”。
-2. 作用域选中“系统界面”（`com.android.systemui`）。
-3. 系统通知样式保持“经典样式”。
-4. 重启系统界面或手机。
-5. 下拉通知栏，手指落在可展开的通知上即向下拖动。无需等待长按菜单；维持同一次触摸往回拖动，可逐渐收回。
+1. 安装 APK，在 LSPosed 启用本模块，作用域仅选“系统界面”（com.android.systemui）。
+2. 系统通知样式保持“经典样式”，重新加载系统界面后生效。
+3. 手指落在有展开内容的通知上直接向下拖，不必等长按菜单；同一次触摸中往回拖可逐渐收回。
+4. 应用内可发送、清除本地示例通知。通知权限只供此测试用途，不影响模块功能。
 
-不是每条通知都有更多内容：是否能展开仍取决于通知提供的展开内容。分组展开和单条通知展开是系统原有的不同状态。松手后的结果由原系统决定。
+停用时在 LSPosed 禁用模块并重新加载系统界面。没有替换系统 APK、重置模块设置或更改通知隐私设置。
 
-恢复原状：在 LSPosed 禁用本模块，再重启系统界面；需要时卸载 APK。
+## 实现
 
-## 编译
+ClassicShadeModule 保留三处已验证的基础 hook：经典样式启用 ExpandHelper、对齐本机原生触摸接管阈值、恢复列表滚动后的下拉识别。
 
-依赖 JDK 17、Android SDK Platform 36、Gradle 8.14.5。创建 `local.properties` 指向本机 SDK：
+ClassicGroupExpansion 增加八处局部适配：
 
-```properties
-sdk.dir=/path/to/Android/sdk
-```
+- 在原生分组拖动开始时读取现有子视图和尺寸；排除锁屏、隐私公有视图、低优先级布局及嵌套 Bundle。
+- 根据实际卡片高度计算进度；按每条通知当前高度累加位置，避免仍按折叠行高排列造成重叠。
+- 将分组标题、总图标、数量与子卡片背景接到相同进度，沿用原生内容 wrapper 的 transformFrom/transformTo。
+- 对超出分组边界的子视图裁切，逐渐显示后续子通知；目标高度计入经典分组标题。
+- ExpandHelper 负责手势、速度、取消和松手后的高度动画；适配期间直接应用 ViewState，避免再启动一套独立分组动画。
+- 临时 Session 在原生拖动与松手动画结束时移除；视图被移除时也清理引用。完成状态使用弱引用键，接口缓存只保存类字段和方法。
+
+没有复制通知视图、缓存通知截图、重建消息内容、添加后台服务、轮询、唤醒锁、网络权限或通知监听器。新增逻辑主要随系统已有的拖动与状态更新执行；不保证零 CPU、零额外内存或零耗电。没有进行长期功耗、受控堆内存或帧耗时 A/B 测试。
+
+## 验证与边界
+
+2026-10-18 用户手动确认分组展开效果可用；日志记录到 2、7、8 条子通知的分组拖动以及滚动列表识别，没有适配错误或当前系统界面进程崩溃记录。最终包的两份功能源码与用户确认时逐字节相同，只更新了测试应用说明文字。Release 与 Lint 通过（0 错误、16 警告），签名沿用既有证书，手机 APK 哈希与交付包一致。
+
+未将上述用户实测扩大为所有通知类型、每个分组数量、横屏、主题、无障碍大字体、锁屏、第三方 RemoteViews 或固件版本的全面验证。特殊布局或未测量子项沿用系统行为；固件更新需要重新核对内部接口。
+
+1.0.1 已修复长列表滚动后不能展开的问题并获用户确认；1.0.2 的单一进度实验曾导致视觉退化，1.0.3 撤回该实验；1.0.4 是用户允许修改布局后实现的新版本。
+
+## 构建
+
+使用 JDK 17、Android SDK Platform 36、Gradle 8.14.5。创建本机 local.properties 指定 sdk.dir，然后执行：
 
 ```sh
-./gradlew :app:assembleDebug :app:lintDebug
 ./gradlew :app:assembleRelease :app:lintRelease
 ```
 
-`release` 构建默认未签名，应使用自己的 Android 签名证书执行 zipalign/apksigner。源码包不含私人签名密钥、本机 SDK 路径、SystemUI 反编译源码或手机配置备份。当前任务的签名密钥保存在本地工作目录 `.signing/`，后续更新应使用同一证书。
-
-接口依据：[libxposed API 102 Maven 发布](https://central.sonatype.com/artifact/io.github.libxposed/api/102.0.0)、[LSPosed 模块开发说明](https://github.com/LSPosed/LSPosed/wiki/Develop-Xposed-Modules-Using-Modern-Xposed-API)。本机 SystemUI 实现通过 ADB 读取核对。
-
-## 验证状态
-
-本机已通过单条与分组通知的连续下拉、同一次触摸内反向回拖、松手保持展开测试；用户手动确认点击通知可以打开应用。单条通知高度为 `204 → 294 → 424 → 554 → 394 → 254 → 204 px`，分组为 `282 → 372 → 502 → 632 → 472 → 332 → 282 px`。松手保持展开测试为 `625 px`，系统记录 `isUserExpanded=true`。
-
-没有额外实现“松手后另起一次上滑”的折叠手势，该动作仍沿用原系统的滚动和通知交互。截图和完整记录见随附《使用与验证说明》。功耗尚未做长时间 A/B 测试；没有常驻任务不等于实测零额外耗电。
-
-
+Release 默认未签名，需 zipalign 与 apksigner。源码包不含 .signing 私人密钥、local.properties、本机配置、构建缓存、手机设置、系统 APK 或反编译源码。本地后续更新需沿用 work/classic-shade/.signing 的签名密钥。

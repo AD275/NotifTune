@@ -36,12 +36,12 @@ public final class MainActivity extends Activity {
             return insets;
         });
         text(content, "经典通知自由展开", 26, true);
-        text(content, "1.0.0 · 澎湃 OS 4 · LSPosed API 102", 13, false);
+        text(content, "1.0.4 · 澎湃 OS 4 · LSPosed API 102", 13, false);
         text(content, "经典外观，系统原生手势", 20, true);
         text(content, "在 LSPosed 中启用本模块，作用域勾选“系统界面”（com.android.systemui），重启系统界面或手机后生效。系统通知样式保持“经典样式”。", 16, false);
         text(content, "手指落在可展开的通知上后向下拖动，内容会随拖动展开；同一次触摸中往回拖可逐步收回，松手由系统完成收拢或展开。无需停留到长按菜单出现。", 16, false);
-        text(content, "模块只启用系统已有的 ExpandHelper，不重画通知，不添加后台服务、定时器或网络请求。锁屏限制沿用系统设置。", 15, false);
-        button(content, "发送测试通知", v -> sendTests());
+        text(content, "复用系统通知视图，分组内容会随拖动逐渐铺开。不添加后台服务、定时器或网络请求，锁屏限制沿用系统设置。", 15, false);
+        button(content, "发送测试通知（单条 + 9 条分组）", v -> sendTests());
         button(content, "清除测试通知", v -> {
             getSystemService(NotificationManager.class).cancelAll();
             Toast.makeText(this, "已清除本模块的测试通知", Toast.LENGTH_SHORT).show();
@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
         scroll.setFillViewport(true);
         scroll.addView(content);
         setContentView(scroll);
+        if (getIntent().getBooleanExtra("send_tests", false)) sendTests();
     }
 
     private void sendTests() {
@@ -72,7 +73,7 @@ public final class MainActivity extends Activity {
         manager.notify(101, base(open).setContentTitle("单条通知 · 拖动展开测试")
                 .setContentText("向下拖动看全文，保持触摸往回拖可收起。")
                 .setStyle(new Notification.BigTextStyle().bigText(body)).build());
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 9; i++) {
             manager.notify(201 + i, base(open).setGroup("classic_shade_demo")
                     .setContentTitle("分组通知 " + (i + 1))
                     .setContentText("测试内容 · 保留经典样式")
@@ -84,8 +85,9 @@ public final class MainActivity extends Activity {
                 .setStyle(new Notification.InboxStyle()
                         .addLine("分组通知 1 · 保留经典样式")
                         .addLine("分组通知 2 · 随手指连续展开")
-                        .addLine("分组通知 3 · 使用系统动画"))
-                .setContentText("包含三条本地测试通知").build());
+                        .addLine("分组通知 3 · 使用系统动画")
+                        .setSummaryText("9 条本地测试通知"))
+                .setContentText("包含九条本地测试通知").build());
         Toast.makeText(this, "已发送本地测试通知，请下拉通知栏测试", Toast.LENGTH_SHORT).show();
     }
 

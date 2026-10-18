@@ -14,8 +14,10 @@ public final class ClassicShadeModule extends XposedModule {
     private boolean systemUiProcess;
     private boolean installed;
     private boolean reportedEnabled;
+    private boolean reportedScrolledGesture;
     private boolean reportedFailure;
     private volatile boolean classicStyle;
+    private ClassicGroupExpansion groupExpansion;
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
@@ -28,6 +30,7 @@ public final class ClassicShadeModule extends XposedModule {
                 !"com.android.systemui".equals(param.getPackageName())) return;
         HookHandle enableHook = null;
         HookHandle thresholdHook = null;
+        HookHandle scrolledPullHook = null;
         try {
             ClassLoader loader = param.getClassLoader();
             Class<?> injector = Class.forName(STACK +
@@ -65,16 +68,88 @@ public final class ClassicShadeModule extends XposedModule {
                 return result;
             });
             thresholdHook = installNativeStretchThreshold(loader);
+            scrolledPullHook = installScrolledPullRecognition(loader);
+            try {
+                groupExpansion = new ClassicGroupExpansion(this, loader, () -> classicStyle);
+            } catch (Throwable error) {
+                log(Log.ERROR, TAG, "Group adaptation unavailable; basic gestures retained", error);
+            }
             installed = true;
 
             // Prevent ART from bypassing this small OEM method through inlining.
             deoptimizeCallers(loader);
-            report("Installed OEM enable + native touch threshold hooks (API " + getApiVersion() + ")");
+            report("Installed OEM enable + native touch threshold + scrolled pull hooks (API " + getApiVersion() + ")");
         } catch (Throwable error) {
+            if (scrolledPullHook != null) scrolledPullHook.unhook();
             if (thresholdHook != null) thresholdHook.unhook();
             if (enableHook != null) enableHook.unhook();
             log(Log.ERROR, TAG, "Unsupported SystemUI; no modification applied", error);
         }
+    }
+
+    private HookHandle installScrolledPullRecognition(ClassLoader loader) throws Exception {
+        Class<?> helper = Class.forName("com.android.systemui.ExpandHelper", false, loader);
+        Field enabled = field(helper, "mEnabled");
+        Field expanding = field(helper, "mExpanding");
+        Field watching = field(helper, "mWatchingForPull");
+        Field resized = field(helper, "mResizedView");
+        Field detector = field(helper, "mSGD");
+        Field adapter = field(helper, "mScrollAdapter");
+        Field host = field(adapter.getType(), "this$0");
+        Method scrollY = host.getType().getDeclaredMethod("getOwnScrollY");
+        Method inside = helper.getDeclaredMethod("isInside", android.view.View.class,
+                float.class, float.class);
+        scrollY.setAccessible(true);
+        inside.setAccessible(true);
+        Method intercept = helper.getDeclaredMethod("onInterceptTouchEvent", android.view.MotionEvent.class);
+
+        HookHandle handle = hook(intercept).intercept(chain -> {
+            Object result = chain.proceed();
+            android.view.MotionEvent event = (android.view.MotionEvent) chain.getArg(0);
+            if (!classicStyle || event.getActionMasked() != android.view.MotionEvent.ACTION_DOWN ||
+                    event.getPointerCount() != 1) return result;
+            try {
+                Object self = chain.getThisObject();
+                // Let the native DOWN handling pick and validate the row first.
+                // Its remaining false condition is getOwnScrollY() != 0. A scroll
+                // offset must not prevent a new drag on that valid notification.
+                if (enabled.getBoolean(self) && !expanding.getBoolean(self) &&
+                        !watching.getBoolean(self) && resized.get(self) != null) {
+                    Object scrollAdapter = adapter.get(self);
+                    if (scrollAdapter != null) {
+                        Object scrollHost = host.get(scrollAdapter);
+                        android.view.ScaleGestureDetector scaleDetector =
+                                (android.view.ScaleGestureDetector) detector.get(self);
+                        if ((Integer) scrollY.invoke(scrollHost) > 0 &&
+                                (Boolean) inside.invoke(self, scrollHost,
+                                        (float) (int) scaleDetector.getFocusX(),
+                                        (float) (int) scaleDetector.getFocusY())) {
+                            watching.setBoolean(self, true);
+                            if (!reportedScrolledGesture) {
+                                reportedScrolledGesture = true;
+                                report("Scrolled classic list: native pull recognition enabled");
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable error) {
+                if (!reportedFailure) {
+                    reportedFailure = true;
+                    log(Log.ERROR, TAG, "Scrolled pull unavailable; using OEM behavior", error);
+                }
+            }
+            return result;
+        });
+        try {
+            Class<?> handler = Class.forName(STACK +
+                    "NotificationStackScrollLayoutController$TouchHandler", false, loader);
+            for (Method method : handler.getDeclaredMethods()) {
+                if (method.getName().equals("onInterceptTouchEvent")) deoptimize(method);
+            }
+        } catch (Throwable ignored) {
+            // Optional optimization hint; the hook still applies without it.
+        }
+        return handle;
     }
 
     private void deoptimizeCallers(ClassLoader loader) {

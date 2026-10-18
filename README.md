@@ -8,9 +8,9 @@
 
 ---
 
-## ⭐ 当前推荐版本：ClassicShadeGesture 1.0.0（2026-10）
+## ⭐ 当前推荐版本：ClassicShadeGesture 1.0.4（2026-10）
 
-针对 **澎湃OS 4 / Android 17** 重写的轻量实现（源码目录 [`ClassicShadeGesture/`](ClassicShadeGesture/)，安装包 [`ClassicShadeGesture-1.0.0.apk`](ClassicShadeGesture-1.0.0.apk)）。
+针对 **澎湃OS 4 / Android 17** 重写的轻量实现（源码目录 [`ClassicShadeGesture/`](ClassicShadeGesture/)，安装包 [`ClassicShadeGesture-1.0.4.apk`](ClassicShadeGesture-1.0.4.apk)）。
 
 **设计思路**：保留系统「经典样式」的通知布局，**复用系统内置的 Android `ExpandHelper`**——不重建通知视图、不做全局布局扫描。模块只有两个 hook（作用域固定 `com.android.systemui`）：
 
@@ -19,9 +19,11 @@
 
 高度计算、内容过渡、松手动画、速度、点击、左右滑动全部交给原系统。
 
+**1.0.4 新增经典分组子通知布局适配**：分组拖动时按实际卡片高度累加子通知位置、裁切超出边界的子视图、分组标题/图标/数量/背景随进度变化，修掉了此前"拖动出现大块空白、松手才铺开"的问题；仍复用原生内容变换与 ExpandHelper 松手动画。
+
 | 手势 | 行为 |
 |---|---|
-| 在可展开通知上**向下拖** | 跟手逐级展开（松手由系统决定提交） |
+| 在可展开通知上**向下拖** | 跟手逐级展开（单条与分组均支持） |
 | 同一次触摸内**反向回拖** | 逐级收回 |
 | 列表滚动 / 点按 / 侧滑删除 | 系统原有行为，完全不受影响 |
 
@@ -35,9 +37,10 @@
 
 不是每条通知都有更多内容：能否展开取决于通知本身是否提供展开内容。分组展开与单条展开是系统原有的不同状态。
 
-### 兼容性（ClassicShadeGesture 1.0.0）
+### 兼容性（ClassicShadeGesture 1.0.4）
 
-- 实测设备：Redmi K90 Pro Max（`myron`），澎湃OS 4.0.2.0.XPMCNXM / Android 17，LSPosed 2.2.1
+- 实测设备：Redmi K90 Pro Max（`myron`），澎湃OS 4.0.4.0.XPMCNXM / Android 17，LSPosed 2.2.1
+- 1.0.4 分组实测：用户确认可用；日志记录 2、7、8 条子通知的分组拖动，无适配错误
 - 单条通知展开高度实测：`204 → 294 → 424 → 554 → 394 → 254 → 204 px`；分组：`282 → 372 → 502 → 632 → 472 → 332 → 282 px`
 - 未在其他机型/系统版本测试；固件升级后需要重新核对内部接口，欢迎反馈
 
